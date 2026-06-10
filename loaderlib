@@ -1,0 +1,435 @@
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local UserInputService = game:GetService("UserInputService")
+local MarketplaceService = game:GetService("MarketplaceService")
+
+local LoaderLib = {}
+LoaderLib.__index = LoaderLib
+
+-- UI Asset Helpers
+local function applySquircle(parent, color, sliceScale, transparency)
+    local img = Instance.new("ImageLabel")
+    img.Name = "Squircle"
+    img.BackgroundTransparency = 1
+    img.Size = UDim2.new(1, 0, 1, 0)
+    img.Image = "rbxassetid://80999662900595"
+    img.ImageColor3 = color
+    img.ImageTransparency = transparency or 0
+    img.ScaleType = Enum.ScaleType.Slice
+    img.SliceCenter = Rect.new(256, 256, 256, 256)
+    img.SliceScale = sliceScale or 0.08594
+    img.ZIndex = parent.ZIndex
+    img.Parent = parent
+    return img
+end
+
+local function applyShadow(parent)
+    local img = Instance.new("ImageLabel")
+    img.Name = "Shadow"
+    img.BackgroundTransparency = 1
+    img.Size = UDim2.new(1, 3, 1, 3)
+    img.Position = UDim2.new(0.5, 0, 0.5, 0)
+    img.AnchorPoint = Vector2.new(0.5, 0.5)
+    img.Image = "rbxassetid://84825982946844"
+    img.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    img.ImageTransparency = 0.5
+    img.ScaleType = Enum.ScaleType.Slice
+    img.SliceCenter = Rect.new(512, 512, 512, 512)
+    img.SliceScale = 0.01953
+    img.ZIndex = parent.ZIndex - 1
+    img.Parent = parent
+    return img
+end
+
+local function createText(parent, text, size, font, weight, color)
+    local txt = Instance.new("TextLabel")
+    txt.Size = size
+    txt.BackgroundTransparency = 1
+    txt.Text = text
+    txt.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+    txt.FontFace = Font.new("rbxassetid://12187365364", weight or Enum.FontWeight.Medium)
+    txt.TextSize = 14
+    txt.ZIndex = parent.ZIndex + 1
+    txt.Parent = parent
+    return txt
+end
+
+-- Core Window Creation
+function LoaderLib:CreateWindow(options)
+    options = options or {}
+    local TitleText = options.Title or "Loader"
+    local Size = options.Size or UDim2.new(0, 500, 0, 350)
+    
+    local selfObj = setmetatable({}, LoaderLib)
+    
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "CustomLoaderLib"
+    ScreenGui.IgnoreGuiInset = true
+    ScreenGui.ScreenInsets = Enum.ScreenInsets.None
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    local targetGui
+    if gethui then
+        pcall(function() targetGui = gethui() end)
+    end
+    if not targetGui then
+        pcall(function() targetGui = game:GetService("CoreGui") end)
+    end
+    if not targetGui and Players.LocalPlayer then
+        targetGui = Players.LocalPlayer:FindFirstChild("PlayerGui")
+    end
+    if targetGui then
+        ScreenGui.Parent = targetGui
+    end
+    selfObj.ScreenGui = ScreenGui
+
+    local MainContainer = Instance.new("Frame")
+    MainContainer.Name = "MainContainer"
+    MainContainer.Size = Size
+    MainContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
+    MainContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+    MainContainer.BackgroundTransparency = 1
+    MainContainer.Parent = ScreenGui
+
+    local MainBg = applySquircle(MainContainer, Color3.fromRGB(25, 25, 28), 0.08594)
+    MainBg.ZIndex = 1
+
+    local TopBar = Instance.new("Frame")
+    TopBar.Size = UDim2.new(1, 0, 0, 45)
+    TopBar.BackgroundTransparency = 1
+    TopBar.ZIndex = 2
+    TopBar.Parent = MainContainer
+
+    local TopTitle = createText(TopBar, TitleText, UDim2.new(1, -20, 1, 0), nil, Enum.FontWeight.SemiBold)
+    TopTitle.TextSize = 20
+    TopTitle.Position = UDim2.new(0, 20, 0, 0)
+    TopTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+    -- Dragging Logic
+    local dragging, dragInput, dragStart, startPos
+    TopBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = MainContainer.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    TopBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            MainContainer.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    local ContentArea = Instance.new("Frame")
+    ContentArea.Size = UDim2.new(1, -40, 1, -65)
+    ContentArea.Position = UDim2.new(0, 20, 0, 45)
+    ContentArea.BackgroundTransparency = 1
+    ContentArea.ZIndex = 2
+    ContentArea.Parent = MainContainer
+
+    local TabButtonsFrame = Instance.new("Frame")
+    TabButtonsFrame.Size = UDim2.new(0, 120, 1, 0)
+    TabButtonsFrame.BackgroundTransparency = 1
+    TabButtonsFrame.ZIndex = 2
+    TabButtonsFrame.Parent = ContentArea
+
+    local TabListLayout = Instance.new("UIListLayout")
+    TabListLayout.Padding = UDim.new(0, 10)
+    TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    TabListLayout.Parent = TabButtonsFrame
+
+    local PagesFrame = Instance.new("Frame")
+    PagesFrame.Size = UDim2.new(1, -135, 1, 0)
+    PagesFrame.Position = UDim2.new(0, 135, 0, 0)
+    PagesFrame.BackgroundTransparency = 1
+    PagesFrame.ZIndex = 2
+    PagesFrame.Parent = ContentArea
+
+    selfObj.TabButtonsFrame = TabButtonsFrame
+    selfObj.PagesFrame = PagesFrame
+    selfObj.Tabs = {}
+    selfObj.ActiveTab = nil
+
+    return selfObj
+end
+
+-- Component Functions
+local function createButtonElement(parent, text, size)
+    local btn = Instance.new("TextButton")
+    btn.Size = size
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.ZIndex = parent.ZIndex
+    btn.Parent = parent
+    
+    local shadow = applyShadow(btn)
+    local bg = applySquircle(btn, Color3.fromRGB(83, 83, 92), 0.03906)
+    local highlight = applySquircle(btn, Color3.fromRGB(255, 255, 255), 0.03906, 0.95)
+    
+    local txt = createText(btn, text, UDim2.new(1, 0, 1, 0), nil, Enum.FontWeight.Medium)
+    txt.TextSize = 14
+    
+    return btn, highlight, txt
+end
+
+function LoaderLib:CreateTab(name)
+    local TabObj = {}
+    
+    local page = Instance.new("Frame")
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.BackgroundTransparency = 1
+    page.Visible = false
+    page.ZIndex = 2
+    page.Parent = self.PagesFrame
+    
+    local btn, highlight, txt = createButtonElement(self.TabButtonsFrame, name, UDim2.new(1, 0, 0, 38))
+    
+    if not self.ActiveTab then
+        self.ActiveTab = highlight
+        highlight.ImageTransparency = 0.85
+        page.Visible = true
+    end
+    
+    btn.MouseButton1Click:Connect(function()
+        if self.ActiveTab then
+            TweenService:Create(self.ActiveTab, TweenInfo.new(0.2), {ImageTransparency = 0.95}):Play()
+        end
+        self.ActiveTab = highlight
+        TweenService:Create(highlight, TweenInfo.new(0.2), {ImageTransparency = 0.85}):Play()
+        
+        for _, p in pairs(self.PagesFrame:GetChildren()) do
+            if p:IsA("Frame") then p.Visible = false end
+        end
+        page.Visible = true
+    end)
+    
+    TabObj.Page = page
+    TabObj.Library = self
+    setmetatable(TabObj, {__index = LoaderLib})
+    return TabObj
+end
+
+function LoaderLib:AddButton(options)
+    local parent = self.Page
+    local title = options.Title or "Button"
+    local callback = options.Callback or function() end
+    
+    local btnContainer = Instance.new("Frame")
+    btnContainer.Size = UDim2.new(1, 0, 0, 42)
+    btnContainer.BackgroundTransparency = 1
+    btnContainer.ZIndex = parent.ZIndex
+    btnContainer.Parent = parent
+    
+    local btn, hl, txt = createButtonElement(btnContainer, title, UDim2.new(1, 0, 1, 0))
+    txt.TextXAlignment = Enum.TextXAlignment.Center
+    
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+function LoaderLib:AddInfoPanel(userInfo)
+    local parent = self.Page
+    
+    local InfoPanel = Instance.new("Frame")
+    InfoPanel.Size = UDim2.new(1, 0, 0, 120)
+    InfoPanel.BackgroundTransparency = 1
+    InfoPanel.ZIndex = parent.ZIndex
+    InfoPanel.Parent = parent
+
+    local InfoBg = applySquircle(InfoPanel, Color3.fromRGB(40, 40, 45), 0.03906)
+
+    local InfoList = Instance.new("UIListLayout")
+    InfoList.Padding = UDim.new(0, 4)
+    InfoList.SortOrder = Enum.SortOrder.LayoutOrder
+    InfoList.Parent = InfoPanel
+
+    local InfoPad = Instance.new("UIPadding")
+    InfoPad.PaddingTop = UDim.new(0, 10)
+    InfoPad.PaddingLeft = UDim.new(0, 10)
+    InfoPad.Parent = InfoPanel
+
+    local function addText(text)
+        local lbl = createText(InfoPanel, text, UDim2.new(1, -10, 0, 16), nil, Enum.FontWeight.Medium, Color3.fromRGB(200, 200, 200))
+        lbl.TextSize = 12
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        return lbl
+    end
+
+    addText("User: " .. (userInfo.Username or Players.LocalPlayer.Name))
+    addText("Game: " .. (userInfo.GameName or "N/A"))
+    addText("ID: " .. tostring(userInfo.GameId or game.PlaceId))
+    
+    local TimeText = addText("Time: " .. os.date("%X"))
+    addText("Version: " .. (userInfo.Version or "1.0.0"))
+
+    task.spawn(function()
+        while task.wait(1) do
+            if not TimeText.Parent then break end
+            TimeText.Text = "Time: " .. os.date("%X")
+        end
+    end)
+    
+    return InfoPanel
+end
+
+function LoaderLib:AddSearchList()
+    local parent = self.Page
+    
+    local SearchFrame = Instance.new("Frame")
+    SearchFrame.Size = UDim2.new(1, 0, 0, 40)
+    SearchFrame.BackgroundTransparency = 1
+    SearchFrame.ZIndex = parent.ZIndex
+    SearchFrame.Parent = parent
+
+    local SearchBg = applySquircle(SearchFrame, Color3.fromRGB(40, 40, 45), 0.03906)
+
+    local SearchBox = Instance.new("TextBox")
+    SearchBox.Size = UDim2.new(1, -20, 1, 0)
+    SearchBox.Position = UDim2.new(0, 10, 0, 0)
+    SearchBox.BackgroundTransparency = 1
+    SearchBox.Text = ""
+    SearchBox.PlaceholderText = "Search..."
+    SearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SearchBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
+    SearchBox.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium)
+    SearchBox.TextSize = 14
+    SearchBox.TextXAlignment = Enum.TextXAlignment.Left
+    SearchBox.ZIndex = parent.ZIndex + 1
+    SearchBox.Parent = SearchFrame
+
+    local Scroll = Instance.new("ScrollingFrame")
+    Scroll.Size = UDim2.new(1, 0, 1, -50)
+    Scroll.Position = UDim2.new(0, 0, 0, 50)
+    Scroll.BackgroundTransparency = 1
+    Scroll.ScrollBarThickness = 2
+    Scroll.ZIndex = parent.ZIndex
+    Scroll.Parent = parent
+
+    local Layout = Instance.new("UIListLayout")
+    Layout.Padding = UDim.new(0, 10)
+    Layout.SortOrder = Enum.SortOrder.LayoutOrder
+    Layout.Parent = Scroll
+
+    local SearchObj = {
+        Scroll = Scroll,
+        Box = SearchBox,
+        Items = {}
+    }
+
+    function SearchObj:AddItem(name, id)
+        table.insert(self.Items, {Name = name, Id = id})
+        self:Refresh()
+    end
+
+    function SearchObj:Refresh()
+        for _, child in pairs(self.Scroll:GetChildren()) do
+            if child:IsA("TextButton") or child:IsA("Frame") then child:Destroy() end
+        end
+        
+        local filter = string.lower(self.Box.Text)
+        for _, itemData in ipairs(self.Items) do
+            if filter == "" or string.find(string.lower(itemData.Name), filter) then
+                local btnContainer = Instance.new("Frame")
+                btnContainer.Size = UDim2.new(1, -5, 0, 42)
+                btnContainer.BackgroundTransparency = 1
+                btnContainer.ZIndex = self.Scroll.ZIndex
+                btnContainer.Parent = self.Scroll
+                
+                local btn, hl, txt = createButtonElement(btnContainer, itemData.Name, UDim2.new(1, 0, 1, 0))
+                txt.TextXAlignment = Enum.TextXAlignment.Left
+                txt.Position = UDim2.new(0, 15, 0, 0)
+                
+                local actionBtn, actionHl, actionTxt = createButtonElement(btn, "Join", UDim2.new(0, 60, 0, 26))
+                actionBtn.Position = UDim2.new(1, -70, 0.5, -13)
+                
+                actionBtn.MouseButton1Click:Connect(function()
+                    TeleportService:Teleport(itemData.Id, Players.LocalPlayer)
+                end)
+            end
+        end
+    end
+
+    SearchBox.Changed:Connect(function(prop)
+        if prop == "Text" then
+            SearchObj:Refresh()
+        end
+    end)
+    
+    return SearchObj
+end
+
+function LoaderLib:AddUpdateLog(updates)
+    local parent = self.Page
+    
+    local ULogPanel = Instance.new("Frame")
+    ULogPanel.Size = UDim2.new(1, 0, 1, 0)
+    ULogPanel.BackgroundTransparency = 1
+    ULogPanel.ZIndex = parent.ZIndex
+    ULogPanel.Parent = parent
+
+    local ULogBg = applySquircle(ULogPanel, Color3.fromRGB(40, 40, 45), 0.03906)
+
+    local ULogTitle = createText(ULogPanel, "Update Log", UDim2.new(1, 0, 0, 25), nil, Enum.FontWeight.SemiBold)
+    ULogTitle.Position = UDim2.new(0, 10, 0, 5)
+    ULogTitle.TextSize = 13
+    ULogTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+    local updateString = ""
+    for _, str in pairs(updates) do
+        updateString = updateString .. "- " .. str .. "\n"
+    end
+
+    local ULogText = createText(ULogPanel, updateString, UDim2.new(1, -20, 1, -35), nil, Enum.FontWeight.Medium, Color3.fromRGB(180, 180, 180))
+    ULogText.Position = UDim2.new(0, 10, 0, 30)
+    ULogText.TextSize = 12
+    ULogText.TextXAlignment = Enum.TextXAlignment.Left
+    ULogText.TextYAlignment = Enum.TextYAlignment.Top
+    
+    return ULogPanel
+end
+
+-- Layout Helpers
+function LoaderLib:CreateSectionLayout()
+    local parent = self.Page
+    
+    local LeftCol = Instance.new("Frame")
+    LeftCol.Size = UDim2.new(0.5, -5, 1, 0)
+    LeftCol.BackgroundTransparency = 1
+    LeftCol.ZIndex = parent.ZIndex
+    LeftCol.Parent = parent
+
+    local LeftList = Instance.new("UIListLayout")
+    LeftList.Padding = UDim.new(0, 10)
+    LeftList.SortOrder = Enum.SortOrder.LayoutOrder
+    LeftList.Parent = LeftCol
+
+    local RightCol = Instance.new("Frame")
+    RightCol.Size = UDim2.new(0.5, -5, 1, 0)
+    RightCol.Position = UDim2.new(0.5, 5, 0, 0)
+    RightCol.BackgroundTransparency = 1
+    RightCol.ZIndex = parent.ZIndex
+    RightCol.Parent = parent
+    
+    local RightList = Instance.new("UIListLayout")
+    RightList.Padding = UDim.new(0, 10)
+    RightList.SortOrder = Enum.SortOrder.LayoutOrder
+    RightList.Parent = RightCol
+    
+    return {
+        Left = setmetatable({Page = LeftCol}, {__index = LoaderLib}),
+        Right = setmetatable({Page = RightCol}, {__index = LoaderLib})
+    }
+end
+
+return LoaderLib
